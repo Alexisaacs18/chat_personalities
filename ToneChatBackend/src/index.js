@@ -220,23 +220,31 @@ async function handleChat(req, res, identity) {
 }
 
 function requestPath(req) {
-  // Vercel rewrites to /api and req.url is often just "/api" — use original URL headers.
+  const raw = req.url ?? '/';
+  const url = new URL(raw, 'http://localhost');
+
+  // Vercel rewrite: /v1/health → /api?__path=v1/health
+  const fromQuery = url.searchParams.get('__path');
+  if (fromQuery !== null) {
+    const segment = fromQuery.trim();
+    return segment ? `/${segment.replace(/^\/+/, '')}` : '/';
+  }
+
   const headerUrl =
     req.headers['x-vercel-original-url'] ??
     req.headers['x-forwarded-uri'] ??
     req.headers['x-invoke-path'];
 
-  let pathname;
   if (headerUrl) {
     const value = Array.isArray(headerUrl) ? headerUrl[0] : headerUrl;
-    pathname = new URL(value.startsWith('http') ? value : `http://localhost${value}`, 'http://localhost')
-      .pathname;
-  } else {
-    const raw = req.url ?? '/';
-    pathname = new URL(raw, 'http://localhost').pathname;
+    const pathname = new URL(
+      value.startsWith('http') ? value : `http://localhost${value}`,
+      'http://localhost'
+    ).pathname;
+    return pathname.replace(/^\/api(?=\/|$)/, '') || '/';
   }
 
-  return pathname.replace(/^\/api(?=\/|$)/, '') || '/';
+  return url.pathname.replace(/^\/api(?=\/|$)/, '') || '/';
 }
 
 async function handler(req, res) {
