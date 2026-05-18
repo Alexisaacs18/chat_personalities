@@ -143,7 +143,7 @@ struct ChatAPIClient {
     }
 
     private func makeRequest(request: ChatRequest, token: String) throws -> URLRequest {
-        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("/v1/chat"))
+        var urlRequest = URLRequest(url: AppConfig.endpoint("/v1/chat"))
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -159,9 +159,16 @@ struct ChatAPIClient {
             switch ns.code {
             case NSURLErrorCannotConnectToHost, NSURLErrorNetworkConnectionLost,
                  NSURLErrorNotConnectedToInternet, NSURLErrorCannotFindHost:
+                let host = baseURL.host ?? "server"
+                if AppConfig.isLocalAPI {
+                    return .connection(
+                        "Cannot reach the server at \(host). " +
+                        "TestFlight and physical devices need a deployed HTTPS API in Info.plist—not 127.0.0.1."
+                    )
+                }
                 return .connection(
-                    "Cannot reach the ToneChat server at \(baseURL.host ?? "server"). " +
-                    "Start ToneChatBackend (npm run dev). On a physical device, use your Mac's IP—not 127.0.0.1."
+                    "Cannot reach the ToneChat server at \(host). " +
+                    "Check your connection and that the API is deployed (https://chat-personalities.vercel.app/v1/health)."
                 )
             case NSURLErrorTimedOut:
                 return .connection("Request timed out. Check the server and API key.")

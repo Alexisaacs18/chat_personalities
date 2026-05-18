@@ -55,7 +55,7 @@ final class AuthService: NSObject, ObservableObject {
     func signInDev() async {
         authError = nil
         do {
-            var request = URLRequest(url: baseURL.appendingPathComponent("/v1/auth/dev"))
+            var request = URLRequest(url: AppConfig.endpoint("/v1/auth/dev"))
             request.httpMethod = "POST"
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
@@ -73,7 +73,7 @@ final class AuthService: NSObject, ObservableObject {
     func deleteAccount() async throws {
         guard isSignedInWithApple else { return }
         let token = try await bearerToken()
-        var request = URLRequest(url: baseURL.appendingPathComponent("/v1/account"))
+        var request = URLRequest(url: AppConfig.endpoint("/v1/account"))
         request.httpMethod = "DELETE"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (_, response) = try await URLSession.shared.data(for: request)
@@ -97,7 +97,7 @@ final class AuthService: NSObject, ObservableObject {
         }
 
         do {
-            var request = URLRequest(url: baseURL.appendingPathComponent("/v1/auth/apple"))
+            var request = URLRequest(url: AppConfig.endpoint("/v1/auth/apple"))
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONEncoder().encode(["identityToken": identityToken])
@@ -115,7 +115,7 @@ final class AuthService: NSObject, ObservableObject {
 
     private func fetchGuestSession() async throws {
         let deviceId = KeychainHelper.deviceId()
-        var request = URLRequest(url: baseURL.appendingPathComponent("/v1/auth/guest"))
+        var request = URLRequest(url: AppConfig.endpoint("/v1/auth/guest"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(["deviceId": deviceId])
