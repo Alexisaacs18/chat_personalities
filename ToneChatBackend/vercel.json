@@ -3,9 +3,9 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build",
   "framework": null,
-  "rewrites": [{ "source": "/(.*)", "destination": "/api" }],
+  "rewrites": [{ "source": "/(.*)", "destination": "/api/$1" }],
   "functions": {
-    "api/index.js": {
+    "api/**/*.js": {
       "maxDuration": 60
     }
   }

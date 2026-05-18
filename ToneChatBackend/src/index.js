@@ -220,9 +220,22 @@ async function handleChat(req, res, identity) {
 }
 
 function requestPath(req) {
-  const raw = req.url ?? '/';
-  const pathname = new URL(raw, 'http://localhost').pathname;
-  // Vercel may route via /api; strip that prefix so routes stay /v1/...
+  // Vercel rewrites to /api and req.url is often just "/api" — use original URL headers.
+  const headerUrl =
+    req.headers['x-vercel-original-url'] ??
+    req.headers['x-forwarded-uri'] ??
+    req.headers['x-invoke-path'];
+
+  let pathname;
+  if (headerUrl) {
+    const value = Array.isArray(headerUrl) ? headerUrl[0] : headerUrl;
+    pathname = new URL(value.startsWith('http') ? value : `http://localhost${value}`, 'http://localhost')
+      .pathname;
+  } else {
+    const raw = req.url ?? '/';
+    pathname = new URL(raw, 'http://localhost').pathname;
+  }
+
   return pathname.replace(/^\/api(?=\/|$)/, '') || '/';
 }
 
@@ -239,6 +252,10 @@ async function handler(req, res) {
 
   try {
     const pathname = requestPath(req);
+
+    if (req.method === 'GET' && (pathname === '/' || pathname === '/api')) {
+      return json(res, 200, { ok: true, service: 'tonechat-api', health: '/v1/health' });
+    }
 
     if (req.method === 'GET' && pathname === '/v1/health') {
       return json(res, 200, { ok: true });
