@@ -50,6 +50,18 @@ curl -s -X POST http://127.0.0.1:8787/v1/auth/guest \
 
 For a physical device, point `TONECHAT_API_BASE` in Info.plist to your deployed backend HTTPS URL.
 
+## Deploy backend on Vercel
+
+The API is a **serverless handler** (not `server.listen` on Vercel). Local dev still uses `npm run dev`.
+
+1. In [Vercel](https://vercel.com), **Add Project** → import this repo.
+2. Set **Root Directory** to `ToneChatBackend`.
+3. **Environment variables** (Production): `ANTHROPIC_API_KEY`, `JWT_SECRET`, `APPLE_CLIENT_ID`, `ALLOW_DEV_AUTH=false`, and optional rate-limit vars from `.env.example`.
+4. Deploy. Your API base URL is `https://<your-project>.vercel.app` (routes like `/v1/health`, `/v1/chat`).
+5. Set `TONECHAT_API_BASE` in the iOS app to that HTTPS URL.
+
+**Notes:** Chat uses SSE streaming; Hobby plan has short function timeouts — Pro gives up to 60s (`maxDuration` in `vercel.json`). In-memory rate limits do not share state across serverless instances (fine for MVP).
+
 ## TestFlight
 
 1. Apple Developer Program membership.

@@ -219,7 +219,14 @@ async function handleChat(req, res, identity) {
   }
 }
 
-const server = createServer(async (req, res) => {
+function requestPath(req) {
+  const raw = req.url ?? '/';
+  const pathname = new URL(raw, 'http://localhost').pathname;
+  // Vercel may route via /api; strip that prefix so routes stay /v1/...
+  return pathname.replace(/^\/api(?=\/|$)/, '') || '/';
+}
+
+async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
@@ -231,21 +238,21 @@ const server = createServer(async (req, res) => {
   }
 
   try {
-    const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
+    const pathname = requestPath(req);
 
-    if (req.method === 'GET' && url.pathname === '/v1/health') {
+    if (req.method === 'GET' && pathname === '/v1/health') {
       return json(res, 200, { ok: true });
     }
 
-    if (req.method === 'POST' && url.pathname === '/v1/auth/guest') {
+    if (req.method === 'POST' && pathname === '/v1/auth/guest') {
       return await handleGuestAuth(req, res);
     }
 
-    if (req.method === 'POST' && url.pathname === '/v1/auth/apple') {
+    if (req.method === 'POST' && pathname === '/v1/auth/apple') {
       return await handleAppleAuth(req, res);
     }
 
-    if (req.method === 'POST' && url.pathname === '/v1/auth/dev') {
+    if (req.method === 'POST' && pathname === '/v1/auth/dev') {
       if (process.env.ALLOW_DEV_AUTH !== 'true') {
         return json(res, 403, { error: 'Dev auth disabled' });
       }
@@ -255,7 +262,7 @@ const server = createServer(async (req, res) => {
       return json(res, 200, { token, tier: 'apple', expiresIn: TOKEN_TTL_SECONDS });
     }
 
-    if (url.pathname === '/v1/account' && req.method === 'DELETE') {
+    if (pathname === '/v1/account' && req.method === 'DELETE') {
       const identity = await resolveIdentity(req, JWT_SECRET);
       if (identity.tier !== 'apple') {
         return json(res, 403, { error: 'No account to delete' });
@@ -263,7 +270,7 @@ const server = createServer(async (req, res) => {
       return await handleDeleteAccount(req, res, identity.sub);
     }
 
-    if (req.method === 'POST' && url.pathname === '/v1/chat') {
+    if (req.method === 'POST' && pathname === '/v1/chat') {
       const identity = await resolveIdentity(req, JWT_SECRET);
       return await handleChat(req, res, identity);
     }
@@ -278,18 +285,25 @@ const server = createServer(async (req, res) => {
       json(res, status, { error: e.message ?? 'Internal error' });
     }
   }
-});
+}
 
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(
-      `Port ${PORT} is already in use. Stop the other process (e.g. kill $(lsof -t -i :${PORT})) or set PORT in .env.`
-    );
-    process.exit(1);
-  }
-  throw err;
-});
+export default handler;
 
-server.listen(PORT, () => {
-  console.log(`ToneChat backend listening on http://localhost:${PORT}`);
-});
+// Local dev: long-running server. Vercel sets VERCEL=1 and invokes the handler per request.
+if (!process.env.VERCEL) {
+  const server = createServer(handler);
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(
+        `Port ${PORT} is already in use. Stop the other process (e.g. kill $(lsof -t -i :${PORT})) or set PORT in .env.`
+      );
+      process.exit(1);
+    }
+    throw err;
+  });
+
+  server.listen(PORT, () => {
+    console.log(`ToneChat backend listening on http://localhost:${PORT}`);
+  });
+}
