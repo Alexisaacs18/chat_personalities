@@ -2,7 +2,7 @@ import Foundation
 import Security
 
 enum KeychainHelper {
-    private static let service = "com.tonechat.app"
+    private static let service = "com.personalitychat.app"
     private static let tokenAccount = "authToken"
     private static let tierAccount = "sessionTier"
     private static let deviceIdAccount = "deviceId"

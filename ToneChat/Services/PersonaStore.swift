@@ -6,9 +6,21 @@ enum PersonaStore {
     static func seedBuiltInsIfNeeded(context: ModelContext) {
         let existing = (try? context.fetch(FetchDescriptor<CustomPersona>())) ?? []
         let existingIds = Set(existing.map(\.id))
-        for preset in PresetLoader.loadAll() where !existingIds.contains(preset.id) {
-            context.insert(CustomPersona(from: preset, isBuiltIn: true))
+        let presetIds = Set(PresetLoader.loadAll().map(\.id))
+
+        for preset in PresetLoader.loadAll() {
+            if let row = existing.first(where: { $0.id == preset.id }) {
+                row.isBuiltIn = true
+                if row.name.isEmpty { row.update(from: preset) }
+            } else {
+                context.insert(CustomPersona(from: preset, isBuiltIn: true))
+            }
         }
+
+        for row in existing where presetIds.contains(row.id) {
+            row.isBuiltIn = true
+        }
+
         try? context.save()
     }
 

@@ -87,7 +87,7 @@ final class CustomPersona {
     var intensityVocab: Double
     var intensityFewShots: Double
     /// Bundled starter voice (editable; use reset to restore JSON defaults).
-    var isBuiltIn: Bool
+    var isBuiltIn: Bool = false
     var createdAt: Date
 
     init(from persona: Persona, isBuiltIn: Bool = false) {
