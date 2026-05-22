@@ -143,14 +143,24 @@ struct ChatView: View {
     }
 
     private func errorBanner(_ message: String) -> some View {
-        Text(message)
-            .font(.caption)
-            .foregroundStyle(AppTheme.errorText)
-            .padding(.horizontal, AppTheme.spacingMD)
-            .padding(.vertical, AppTheme.spacingSM)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(AppTheme.errorBackground)
-            .padding(.horizontal, AppTheme.spacingMD)
+        HStack(alignment: .top, spacing: AppTheme.spacingSM) {
+            Image(systemName: "exclamationmark.circle.fill")
+                .foregroundStyle(AppTheme.errorText)
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(AppTheme.errorText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(AppTheme.spacingMD)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.errorBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.radiusCard, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AppTheme.radiusCard, style: .continuous)
+                .stroke(AppTheme.errorText.opacity(0.25), lineWidth: 1)
+        }
+        .padding(.horizontal, AppTheme.spacingMD)
+        .padding(.bottom, AppTheme.spacingSM)
     }
 
     private func sendMessage() {

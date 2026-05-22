@@ -5,6 +5,8 @@ struct VoiceCardRow: View {
     let isSelected: Bool
     let onSelect: () -> Void
     var onEdit: (() -> Void)?
+    var onDelete: (() -> Void)?
+    var onReset: (() -> Void)?
 
     var body: some View {
         HStack(spacing: AppTheme.spacingSM) {
@@ -46,6 +48,28 @@ struct VoiceCardRow: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Edit \(persona.name)")
+            }
+
+            if let onReset, persona.isPreset {
+                Button(action: onReset) {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.body)
+                        .foregroundStyle(.orange)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Reset \(persona.name)")
+            }
+
+            if let onDelete, !persona.isPreset {
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                        .font(.body)
+                        .foregroundStyle(AppTheme.errorText)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Delete \(persona.name)")
             }
         }
         .padding(AppTheme.spacingMD)

@@ -9,14 +9,18 @@ iOS chat app with layered character voices and a backend proxy for Anthropic.
 
 ## Auth and rate limits
 
-| Mode | Sign-in | Rate limit (default) | Chat storage |
-|------|---------|----------------------|--------------|
-| Guest | Not required | 10 messages/min (`GUEST_RATE_LIMIT_PER_MINUTE`) | On-device only |
-| Apple | Optional in Settings | 30 messages/min (`RATE_LIMIT_PER_MINUTE`) | On-device only |
+| Mode | Sign-in | 4-hour budget (default) | Burst (per minute) | Chat storage |
+|------|---------|-------------------------|--------------------|--------------|
+| Guest | Not required | Standard 4h token limit (`GUEST_BUDGET_USD_4H`) | 5 (`GUEST_BURST_PER_MINUTE`) | On-device only |
+| Apple | Optional in Settings | Higher 4h token limit (`APPLE_BUDGET_USD_4H`) | 10 (`APPLE_BURST_PER_MINUTE`) | On-device only |
 
-On first launch the app obtains a **guest session** using an anonymous device UUID. Sign in with Apple is optional and only increases server rate limits.
+Budgets use a **rolling 4-hour window** and charge **actual Anthropic input/output tokens** (long replies burn budget faster). **High fidelity** uses two API passes and requires Sign in with Apple (`HIGH_FIDELITY_APPLE_ONLY=true` by default).
+
+On first launch the app obtains a **guest session** using an anonymous device UUID. Sign in with Apple is optional and raises the 4-hour quota.
 
 Guest limits are a cost control measure; reinstalling the app resets the device identifier.
+
+`GET /v1/usage` (Bearer token) returns rolling 4-hour token counts and percent used (no dollar amounts in the response).
 
 ## Quick start
 
@@ -58,7 +62,7 @@ The API is a **serverless handler** (not `server.listen` on Vercel). Local dev s
 2. Set **Root Directory** to `ToneChatBackend`.
 3. **Framework Preset:** Other (not Next.js). **Build Command:** `npm run build` (must **not** be `npm run dev` — that watch process never exits and hangs the deploy).
 4. **Output Directory:** leave empty.
-5. **Environment variables** (Production): `ANTHROPIC_API_KEY`, `JWT_SECRET`, `APPLE_CLIENT_ID`, `ALLOW_DEV_AUTH=false`, `MAX_TOKENS=2048`, `CHAT_TEMPERATURE=0.7`, `HIGH_FIDELITY_ENABLED=true`, and optional rate-limit vars from `.env.example`.
+5. **Environment variables** (Production): `ANTHROPIC_API_KEY`, `JWT_SECRET`, `APPLE_CLIENT_ID`, `ALLOW_DEV_AUTH=false`, plus budget/burst vars from `.env.example` (`GUEST_BUDGET_USD_4H=0.1`, `APPLE_BUDGET_USD_4H=0.2`, etc.).
 6. Deploy. Your API base URL is `https://<your-project>.vercel.app` (routes like `/v1/health`, `/v1/chat`).
 7. Set `TONECHAT_API_BASE` in the iOS app to that HTTPS URL.
 

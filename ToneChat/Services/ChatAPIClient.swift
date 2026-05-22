@@ -2,7 +2,7 @@ import Foundation
 
 enum ChatAPIError: LocalizedError {
     case unauthorized
-    case rateLimited
+    case rateLimited(String)
     case server(String)
     case connection(String)
 
@@ -10,8 +10,8 @@ enum ChatAPIError: LocalizedError {
         switch self {
         case .unauthorized:
             return "Session expired. Force-quit and reopen the app, or sign in again in Settings."
-        case .rateLimited:
-            return "Too many messages. Try again in a minute, or sign in with Apple for higher limits."
+        case .rateLimited(let msg):
+            return msg
         case .server(let msg):
             return msg
         case .connection(let msg):
@@ -81,7 +81,10 @@ struct ChatAPIClient {
             throw ChatAPIError.server("Invalid response")
         }
         if http.statusCode == 401 { throw ChatAPIError.unauthorized }
-        if http.statusCode == 429 { throw ChatAPIError.rateLimited }
+        if http.statusCode == 429 {
+            let body = await readResponseBody(from: bytes)
+            throw ChatAPIError.rateLimited(UsageLimitMessage.format(from: body))
+        }
         guard (200...299).contains(http.statusCode) else {
             let message = await readErrorMessage(from: bytes, statusCode: http.statusCode)
             throw ChatAPIError.server(message)
@@ -107,7 +110,7 @@ struct ChatAPIClient {
         }
     }
 
-    private func readErrorMessage(from bytes: URLSession.AsyncBytes, statusCode: Int) async -> String {
+    private func readResponseBody(from bytes: URLSession.AsyncBytes) async -> Data {
         var lines: [String] = []
         do {
             for try await line in bytes.lines {
@@ -115,19 +118,19 @@ struct ChatAPIClient {
                 if lines.count > 20 { break }
             }
         } catch {
-            return "Server error (\(statusCode))"
+            return Data()
         }
+        return Data(lines.joined(separator: "\n").utf8)
+    }
 
-        let body = lines.joined(separator: "\n")
-        if let data = body.data(using: .utf8),
-           let json = try? JSONDecoder().decode([String: String].self, from: data),
-           let error = json["error"] {
-            return sanitizeServerMessage(error)
-        }
-        if body.contains("invalid x-api-key") || body.contains("authentication") {
+    private func readErrorMessage(from bytes: URLSession.AsyncBytes, statusCode: Int) async -> String {
+        let body = await readResponseBody(from: bytes)
+        if body.isEmpty { return "Server error (\(statusCode))" }
+        let raw = String(data: body, encoding: .utf8) ?? ""
+        if raw.contains("invalid x-api-key") || raw.contains("authentication") {
             return "Anthropic API key rejected. Check ANTHROPIC_API_KEY in ToneChatBackend/.env"
         }
-        return body.isEmpty ? "Server error (\(statusCode))" : sanitizeServerMessage(String(body.prefix(300)))
+        return sanitizeServerMessage(UsageLimitMessage.format(from: body))
     }
 
     private func sanitizeServerMessage(_ raw: String) -> String {

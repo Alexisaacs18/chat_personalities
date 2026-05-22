@@ -18,7 +18,13 @@ import {
   upsertUser,
   verifyAppleIdentityToken,
 } from './auth.js';
-import { checkRateLimit } from './rateLimit.js';
+import { checkChatRateLimits } from './rateLimit.js';
+import {
+  checkTokenBudget,
+  estimateChatCostUsd,
+  formatUsageResponse,
+  recordTokenUsage,
+} from './tokenBudget.js';
 import {
   buildStylizeSystem,
   buildStylizeUserMessage,
@@ -38,8 +44,10 @@ const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-20250514
 const MAX_TOKENS = Number(process.env.MAX_TOKENS ?? 2048);
 const CHAT_TEMPERATURE = Number(process.env.CHAT_TEMPERATURE ?? 0.7);
 const HIGH_FIDELITY_ENABLED = process.env.HIGH_FIDELITY_ENABLED !== 'false';
-const RATE_LIMIT_APPLE = Number(process.env.RATE_LIMIT_PER_MINUTE ?? 30);
-const RATE_LIMIT_GUEST = Number(process.env.GUEST_RATE_LIMIT_PER_MINUTE ?? 10);
+const HIGH_FIDELITY_APPLE_ONLY = process.env.HIGH_FIDELITY_APPLE_ONLY !== 'false';
+const BURST_GUEST_PER_MIN = Number(process.env.GUEST_BURST_PER_MINUTE ?? 5);
+const BURST_APPLE_PER_MIN = Number(process.env.APPLE_BURST_PER_MINUTE ?? 10);
+const CHAT_HISTORY_LIMIT = Number(process.env.CHAT_HISTORY_LIMIT ?? 10);
 const TOKEN_TTL_SECONDS = 30 * 24 * 3600;
 const IS_DEV = process.env.VERCEL !== '1' && process.env.NODE_ENV !== 'production';
 
@@ -122,7 +130,10 @@ function buildSystemWithTurnHint(persona, lastUser) {
 
 async function streamAnthropic(res, system, messages, options = {}) {
   const finish = (payload) => {
-    if (payload) sendSSE(res, payload);
+    if (payload?.usage && options.sub) {
+      recordTokenUsage(options.sub, payload.usage);
+    }
+    if (payload?.type === 'error') sendSSE(res, payload);
     sendSSE(res, { type: 'done' });
     res.end();
   };
@@ -146,7 +157,10 @@ async function streamAnthropic(res, system, messages, options = {}) {
 
 async function handleHighFidelityChat(res, persona, recent, lastUser, options) {
   const finish = (payload) => {
-    if (payload) sendSSE(res, payload);
+    if (payload?.usage && options.sub) {
+      recordTokenUsage(options.sub, payload.usage);
+    }
+    if (payload?.type === 'error') sendSSE(res, payload);
     sendSSE(res, { type: 'done' });
     res.end();
   };
@@ -159,9 +173,9 @@ async function handleHighFidelityChat(res, persona, recent, lastUser, options) {
   const maxTokens = options.maxTokens ?? MAX_TOKENS;
   const temperature = options.temperature ?? CHAT_TEMPERATURE;
 
-  let draft;
+  let draftResult;
   try {
-    draft = await completeAnthropic({
+    draftResult = await completeAnthropic({
       apiKey: ANTHROPIC_API_KEY,
       model: ANTHROPIC_MODEL,
       system: DRAFT_SYSTEM,
@@ -174,9 +188,14 @@ async function handleHighFidelityChat(res, persona, recent, lastUser, options) {
     return;
   }
 
+  const draft = draftResult.text;
   if (!draft) {
     finish({ type: 'error', message: 'Draft returned empty' });
     return;
+  }
+
+  if (options.sub && draftResult.usage) {
+    recordTokenUsage(options.sub, draftResult.usage);
   }
 
   const stylizeSystem = buildStylizeSystem(persona);
@@ -196,6 +215,22 @@ async function handleHighFidelityChat(res, persona, recent, lastUser, options) {
   });
 }
 
+function estimateHighFidelityCostUsd(persona, recent, lastUser, maxTokens) {
+  const draftUsd = estimateChatCostUsd({
+    system: DRAFT_SYSTEM,
+    messages: recent,
+    maxOutputTokens: maxTokens,
+  });
+  const stylizeSystem = buildStylizeSystem(persona);
+  const draftPlaceholder = 'x'.repeat(maxTokens * 4);
+  const stylizeUsd = estimateChatCostUsd({
+    system: stylizeSystem,
+    messages: [{ role: 'user', content: buildStylizeUserMessage(lastUser, draftPlaceholder) }],
+    maxOutputTokens: maxTokens,
+  });
+  return draftUsd + stylizeUsd;
+}
+
 async function handleChat(req, res, identity) {
   const body = await readBody(req);
   const { persona, messages, highFidelity } = body;
@@ -204,22 +239,72 @@ async function handleChat(req, res, identity) {
     return json(res, 400, { error: 'persona and messages required' });
   }
 
-  const useHighFidelity = Boolean(highFidelity) && HIGH_FIDELITY_ENABLED;
-  const limit = identity.tier === 'apple' ? RATE_LIMIT_APPLE : RATE_LIMIT_GUEST;
-  const rateCost = useHighFidelity ? 2 : 1;
-  if (!checkRateLimit(identity.sub, limit, rateCost)) {
-    return json(res, 429, {
-      error: 'Rate limit exceeded',
-      tier: identity.tier,
-      limit,
+  const isApple = identity.tier === 'apple';
+  const wantsHighFidelity = Boolean(highFidelity) && HIGH_FIDELITY_ENABLED;
+
+  if (wantsHighFidelity && HIGH_FIDELITY_APPLE_ONLY && !isApple) {
+    return json(res, 403, {
+      error: 'High fidelity replies require Sign in with Apple.',
     });
   }
 
-  const recent = messages.slice(-20);
+  const useHighFidelity = wantsHighFidelity && (isApple || !HIGH_FIDELITY_APPLE_ONLY);
+  const burstCost = useHighFidelity ? 2 : 1;
+  const burstLimit = isApple ? BURST_APPLE_PER_MIN : BURST_GUEST_PER_MIN;
+
+  const burst = checkChatRateLimits({
+    sub: identity.sub,
+    tier: identity.tier,
+    cost: burstCost,
+    burstLimit,
+  });
+
+  if (!burst.ok) {
+    const resetAt = new Date(Date.now() + (burst.retryAfterMs ?? 0)).toISOString();
+    return json(res, 429, {
+      error: 'usage_limit',
+      message: "You're sending messages too fast.",
+      resetAt,
+    });
+  }
+
+  const recent = messages.slice(-CHAT_HISTORY_LIMIT);
   const lastUser = lastUserMessage(recent);
   const mode = classifyTurn(lastUser);
   const maxTokens = maxTokensForMode(mode, MAX_TOKENS);
-  const streamOptions = { maxTokens, temperature: CHAT_TEMPERATURE };
+  const streamOptions = {
+    maxTokens,
+    temperature: CHAT_TEMPERATURE,
+    sub: identity.sub,
+  };
+
+  const estimatedUsd = useHighFidelity
+    ? estimateHighFidelityCostUsd(persona, recent, lastUser, maxTokens)
+    : estimateChatCostUsd({
+        system: buildSystemWithTurnHint(persona, lastUser).system,
+        messages: recent,
+        maxOutputTokens: maxTokens,
+      });
+
+  const tokenBudget = checkTokenBudget({
+    sub: identity.sub,
+    tier: identity.tier,
+    estimatedUsd,
+  });
+
+  if (!tokenBudget.ok) {
+    const resetAt = new Date(Date.now() + (tokenBudget.retryAfterMs ?? 0)).toISOString();
+    const payload = {
+      error: 'usage_limit',
+      message: "You've reached your usage limit for this period.",
+      resetAt,
+    };
+    if (!isApple) {
+      payload.hint = 'Sign in with Apple for higher limits.';
+    }
+
+    return json(res, 429, payload);
+  }
 
   if (IS_DEV) {
     console.log('[ToneChat] chat', {
@@ -318,6 +403,11 @@ async function handler(req, res) {
         return json(res, 403, { error: 'No account to delete' });
       }
       return await handleDeleteAccount(req, res, identity.sub);
+    }
+
+    if (req.method === 'GET' && pathname === '/v1/usage') {
+      const identity = await resolveIdentity(req, JWT_SECRET);
+      return json(res, 200, formatUsageResponse(identity.sub, identity.tier));
     }
 
     if (req.method === 'POST' && pathname === '/v1/chat') {

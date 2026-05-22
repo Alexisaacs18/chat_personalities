@@ -50,7 +50,10 @@ export async function completeAnthropic({
 
   const data = await res.json();
   const block = data.content?.find((b) => b.type === 'text');
-  return block?.text?.trim() ?? '';
+  return {
+    text: block?.text?.trim() ?? '',
+    usage: data.usage ?? null,
+  };
 }
 
 export async function streamAnthropicToSSE({
@@ -108,6 +111,7 @@ export async function streamAnthropicToSSE({
   const reader = upstream.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let usage = { input_tokens: 0, output_tokens: 0 };
 
   try {
     while (true) {
@@ -123,6 +127,7 @@ export async function streamAnthropicToSSE({
         if (!data || data === '[DONE]') continue;
         try {
           const event = JSON.parse(data);
+          usage = mergeStreamUsage(usage, event);
           if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
             sendSSE({ type: 'delta', text: event.delta.text ?? '' });
           }
@@ -136,7 +141,28 @@ export async function streamAnthropicToSSE({
     return;
   }
 
-  finish();
+  const hasUsage = usage.input_tokens > 0 || usage.output_tokens > 0;
+  finish(hasUsage ? { usage } : {});
+}
+
+function mergeStreamUsage(current, event) {
+  const next = { ...current };
+  const u = event.message?.usage ?? event.usage;
+  if (!u) return next;
+
+  if (event.type === 'message_start' && u.input_tokens != null) {
+    next.input_tokens = Math.max(next.input_tokens, u.input_tokens);
+  }
+  if (event.type === 'message_delta' && u.output_tokens != null) {
+    next.output_tokens = Math.max(next.output_tokens, u.output_tokens);
+  }
+  if (u.input_tokens != null && event.type !== 'message_delta') {
+    next.input_tokens = Math.max(next.input_tokens, u.input_tokens);
+  }
+  if (u.output_tokens != null) {
+    next.output_tokens = Math.max(next.output_tokens, u.output_tokens);
+  }
+  return next;
 }
 
 function normalizeMessages(messages) {

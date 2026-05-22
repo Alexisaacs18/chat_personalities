@@ -17,6 +17,8 @@ struct SettingsView: View {
     @State private var editingPersona: Persona?
     @State private var isDeleting = false
     @State private var deleteError: String?
+    @State private var personaPendingDelete: Persona?
+    @State private var personaPendingReset: Persona?
 
     private var personas: [Persona] {
         PersonaStore.allPersonas(from: customStored)
@@ -24,9 +26,9 @@ struct SettingsView: View {
 
     private var voiceSectionFooter: String {
         if activeConversation != nil {
-            return "Tap a voice to use it in this chat. Use the pencil to edit any voice."
+            return "Tap a voice to use it in this chat. Pencil to edit; trash to delete custom voices; reset bundled voices."
         }
-        return "Default for new chats. Tap the pencil to edit name, layers, examples, and intensities."
+        return "Default for new chats. Pencil to edit; trash to delete custom voices; reset bundled voices."
     }
 
     var body: some View {
@@ -56,6 +58,40 @@ struct SettingsView: View {
         }
         .onAppear { syncSelectedVoiceId() }
         .onChange(of: activeConversation?.personaId) { _, _ in syncSelectedVoiceId() }
+        .confirmationDialog(
+            "Delete \"\(personaPendingDelete?.name ?? "")\"?",
+            isPresented: deletePersonaDialogPresented,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let persona = personaPendingDelete {
+                    deletePersona(persona)
+                }
+                personaPendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) {
+                personaPendingDelete = nil
+            }
+        } message: {
+            Text("This voice will be removed. Chats that used it will switch to the default voice.")
+        }
+        .confirmationDialog(
+            "Reset \"\(personaPendingReset?.name ?? "")\"?",
+            isPresented: resetPersonaDialogPresented,
+            titleVisibility: .visible
+        ) {
+            Button("Reset", role: .destructive) {
+                if let persona = personaPendingReset {
+                    resetPersona(persona)
+                }
+                personaPendingReset = nil
+            }
+            Button("Cancel", role: .cancel) {
+                personaPendingReset = nil
+            }
+        } message: {
+            Text("This replaces your edits with the original starter voice from the app.")
+        }
         .sheet(isPresented: $showBuilder) {
             NavigationStack {
                 PersonaBuilderView()
@@ -89,7 +125,9 @@ struct SettingsView: View {
                     persona: persona,
                     isSelected: persona.id == selectedVoiceId,
                     onSelect: { selectVoice(persona) },
-                    onEdit: { editingPersona = persona }
+                    onEdit: { editingPersona = persona },
+                    onDelete: persona.isPreset ? nil : { personaPendingDelete = persona },
+                    onReset: persona.isPreset ? { personaPendingReset = persona } : nil
                 )
                 .animation(.easeInOut(duration: 0.2), value: selectedVoiceId)
             }
@@ -132,7 +170,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: AppTheme.spacingSM) {
             sectionHeader(
                 "Reply quality",
-                footer: "High fidelity drafts an accurate answer first, then applies your voice. Slower and counts as 2 messages toward your limit."
+                footer: highFidelityFooter
             )
 
             Toggle("High fidelity replies", isOn: Binding(
@@ -140,10 +178,29 @@ struct SettingsView: View {
                 set: { VoicePreferences.highFidelityReplies = $0 }
             ))
             .tint(AppTheme.accent)
+            .disabled(!auth.isSignedInWithApple)
             .padding(AppTheme.spacingMD)
             .background(AppTheme.surfaceElevated)
             .clipShape(RoundedRectangle(cornerRadius: AppTheme.radiusCard, style: .continuous))
+
+            Text(usageLimitsFooter)
+                .font(.caption)
+                .foregroundStyle(AppTheme.textSecondary)
         }
+    }
+
+    private var highFidelityFooter: String {
+        if auth.isSignedInWithApple {
+            return "Drafts an accurate answer first, then applies your voice. Uses about twice as much of your limit per reply."
+        }
+        return "Sign in with Apple to enable. Uses about twice as much of your limit per reply when on."
+    }
+
+    private var usageLimitsFooter: String {
+        if auth.isSignedInWithApple {
+            return "Signed in: higher usage limits per 4 hours (long replies use more). Up to 10 messages per minute."
+        }
+        return "Guest: standard usage limits per 4 hours (long replies use more). Up to 5 per minute. Sign in with Apple for higher limits."
     }
 
     private var accountSection: some View {
@@ -154,7 +211,7 @@ struct SettingsView: View {
                 if auth.isSignedInWithApple {
                     Label("Signed in with Apple", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(AppTheme.accent)
-                    Text("Higher message limits. Chats stay on this device.")
+                    Text("Higher usage limits. Chats stay on this device.")
                         .font(.caption)
                         .foregroundStyle(AppTheme.textSecondary)
                     Button("Sign out") {
@@ -289,6 +346,46 @@ struct SettingsView: View {
             PersonaStore.save(persona, isBuiltIn: persona.isPreset, context: modelContext)
         }
         try? modelContext.save()
+    }
+
+    private var deletePersonaDialogPresented: Binding<Bool> {
+        Binding(
+            get: { personaPendingDelete != nil },
+            set: { if !$0 { personaPendingDelete = nil } }
+        )
+    }
+
+    private var resetPersonaDialogPresented: Binding<Bool> {
+        Binding(
+            get: { personaPendingReset != nil },
+            set: { if !$0 { personaPendingReset = nil } }
+        )
+    }
+
+    private func deletePersona(_ persona: Persona) {
+        guard PersonaStore.delete(id: persona.id, context: modelContext) else { return }
+
+        if selectedVoiceId == persona.id {
+            let fallback = personas.first { $0.id != persona.id }?.id ?? PresetLoader.defaultPersona.id
+            selectedVoiceId = fallback
+            if activeConversation == nil {
+                VoicePreferences.defaultVoiceId = fallback
+            }
+        }
+
+        if editingPersona?.id == persona.id {
+            editingPersona = nil
+        }
+    }
+
+    private func resetPersona(_ persona: Persona) {
+        guard let restored = PersonaStore.resetBuiltIn(id: persona.id, context: modelContext) else { return }
+        if selectedVoiceId == persona.id {
+            selectVoice(restored)
+        }
+        if editingPersona?.id == persona.id {
+            editingPersona = restored
+        }
     }
 
     private func deleteAccount() async {

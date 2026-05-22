@@ -13,6 +13,7 @@ struct PersonaBuilderView: View {
     @State private var isTesting = false
     @State private var testError: String?
     @State private var showResetConfirm = false
+    @State private var showDeleteConfirm = false
 
     let isNew: Bool
     let isBuiltIn: Bool
@@ -201,6 +202,12 @@ struct PersonaBuilderView: View {
                         showResetConfirm = true
                     }
                 }
+            } else if !isNew {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Delete", role: .destructive) {
+                        showDeleteConfirm = true
+                    }
+                }
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") { save() }
@@ -220,6 +227,19 @@ struct PersonaBuilderView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This replaces your edits with the original starter voice from the app bundle.")
+        }
+        .confirmationDialog(
+            "Delete this voice?",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                PersonaStore.delete(id: persona.id, context: modelContext)
+                dismiss()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This cannot be undone. Chats that used this voice will switch to the default voice.")
         }
     }
 

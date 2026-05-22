@@ -48,13 +48,29 @@ enum PersonaStore {
         return defaultPersona
     }
 
-    static func delete(id: String, context: ModelContext) {
+    @discardableResult
+    static func delete(id: String, context: ModelContext) -> Bool {
         let descriptor = FetchDescriptor<CustomPersona>(
             predicate: #Predicate { $0.id == id }
         )
-        if let item = try? context.fetch(descriptor).first, !item.isBuiltIn {
-            context.delete(item)
-            try? context.save()
+        guard let item = try? context.fetch(descriptor).first, !item.isBuiltIn else {
+            return false
         }
+
+        let fallbackId = PresetLoader.defaultPersona.id
+
+        if let conversations = try? context.fetch(FetchDescriptor<Conversation>()) {
+            for conversation in conversations where conversation.personaId == id {
+                conversation.personaId = fallbackId
+            }
+        }
+
+        if VoicePreferences.defaultVoiceId == id {
+            VoicePreferences.defaultVoiceId = fallbackId
+        }
+
+        context.delete(item)
+        try? context.save()
+        return true
     }
 }
