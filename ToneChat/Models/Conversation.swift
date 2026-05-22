@@ -86,9 +86,11 @@ final class CustomPersona {
     var intensitySpeech: Double
     var intensityVocab: Double
     var intensityFewShots: Double
+    /// Bundled starter voice (editable; use reset to restore JSON defaults).
+    var isBuiltIn: Bool
     var createdAt: Date
 
-    init(from persona: Persona) {
+    init(from persona: Persona, isBuiltIn: Bool = false) {
         self.id = persona.id
         self.name = persona.name
         self.coreIdentity = persona.layers.coreIdentity
@@ -100,6 +102,7 @@ final class CustomPersona {
         self.intensitySpeech = persona.intensities.speechPatterns
         self.intensityVocab = persona.intensities.vocabulary
         self.intensityFewShots = persona.intensities.fewShots
+        self.isBuiltIn = isBuiltIn || persona.isPreset
         self.createdAt = .now
     }
 
@@ -112,7 +115,7 @@ final class CustomPersona {
         return Persona(
             id: id,
             name: name,
-            isPreset: false,
+            isPreset: isBuiltIn,
             layers: PersonaLayers(
                 coreIdentity: coreIdentity,
                 speechPatterns: speechPatterns,

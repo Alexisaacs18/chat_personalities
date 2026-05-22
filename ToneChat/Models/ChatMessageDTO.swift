@@ -18,6 +18,8 @@ struct ChatRequest: Codable {
     var conversationId: String
     var persona: PersonaPayload
     var messages: [ChatMessageDTO]
+    /// Two-pass draft + stylize for higher-quality substantive answers (2× rate limit cost).
+    var highFidelity: Bool = false
 }
 
 struct StreamEvent: Codable {

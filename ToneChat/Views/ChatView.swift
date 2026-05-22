@@ -3,8 +3,7 @@ import SwiftUI
 
 struct ChatView: View {
     @Bindable var conversation: Conversation
-    let presets: [Persona]
-    let customPersonas: [Persona]
+    let personas: [Persona]
 
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var auth: AuthService
@@ -12,8 +11,8 @@ struct ChatView: View {
     @State private var showSettings = false
 
     private var currentPersona: Persona {
-        PresetLoader.persona(byId: conversation.personaId, custom: customPersonas)
-            ?? presets.first
+        PersonaStore.persona(byId: conversation.personaId, in: personas)
+            ?? personas.first
             ?? PresetLoader.defaultPersona
     }
 
@@ -83,11 +82,7 @@ struct ChatView: View {
         }
         .sheet(isPresented: $showSettings) {
             NavigationStack {
-                SettingsView(
-                    presets: presets,
-                    customPersonas: customPersonas,
-                    activeConversation: conversation
-                )
+                SettingsView(activeConversation: conversation)
             }
         }
         .onDisappear {

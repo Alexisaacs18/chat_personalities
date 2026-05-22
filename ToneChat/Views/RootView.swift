@@ -3,10 +3,8 @@ import SwiftUI
 struct RootView: View {
     @EnvironmentObject private var auth: AuthService
 
-    private let presets = PresetLoader.loadAll()
-
     var body: some View {
-        MainSplitView(presets: presets)
+        MainSplitView()
             .tint(AppTheme.accent)
             .overlay {
                 if !auth.isSessionReady {

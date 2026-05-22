@@ -57,7 +57,8 @@ final class ChatViewModel: ObservableObject {
         let request = ChatRequest(
             conversationId: conversation.id.uuidString,
             persona: activePersona.payload,
-            messages: dtos
+            messages: dtos,
+            highFidelity: VoicePreferences.highFidelityReplies
         )
 
         isStreaming = true

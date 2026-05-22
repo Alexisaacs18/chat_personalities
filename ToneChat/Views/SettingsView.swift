@@ -3,29 +3,30 @@ import SwiftData
 import SwiftUI
 
 struct SettingsView: View {
-    let presets: [Persona]
-    let customPersonas: [Persona]
     /// When set (e.g. opened from the chat voice chip), voice changes apply to this chat only.
     var activeConversation: Conversation?
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var auth: AuthService
+    @Query(sort: \CustomPersona.createdAt, order: .forward) private var customStored: [CustomPersona]
     @Query(sort: \Conversation.updatedAt, order: .reverse) private var conversations: [Conversation]
 
+    @State private var selectedVoiceId: String = VoicePreferences.defaultVoiceId
     @State private var showBuilder = false
+    @State private var editingPersona: Persona?
     @State private var isDeleting = false
     @State private var deleteError: String?
 
-    private var selectedVoiceId: String {
-        activeConversation?.personaId ?? VoicePreferences.defaultVoiceId
+    private var personas: [Persona] {
+        PersonaStore.allPersonas(from: customStored)
     }
 
     private var voiceSectionFooter: String {
         if activeConversation != nil {
-            return "Changes who replies in this chat. Your other conversations keep their voice."
+            return "Tap a voice to use it in this chat. Use the pencil to edit any voice."
         }
-        return "Default for new chats. Tap the voice name inside a chat to change that conversation."
+        return "Default for new chats. Tap the pencil to edit name, layers, examples, and intensities."
     }
 
     var body: some View {
@@ -33,6 +34,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: AppTheme.spacingLG) {
                 voiceSection
                 intensitySection
+                chatQualitySection
                 accountSection
                 manageSection
                 legalSection
@@ -52,12 +54,26 @@ struct SettingsView: View {
                 Button("Done") { dismiss() }
             }
         }
+        .onAppear { syncSelectedVoiceId() }
+        .onChange(of: activeConversation?.personaId) { _, _ in syncSelectedVoiceId() }
         .sheet(isPresented: $showBuilder) {
             NavigationStack {
                 PersonaBuilderView()
+                    .environmentObject(auth)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
                             Button("Close") { showBuilder = false }
+                        }
+                    }
+            }
+        }
+        .sheet(item: $editingPersona) { persona in
+            NavigationStack {
+                PersonaBuilderView(persona: persona, isBuiltIn: persona.isPreset)
+                    .environmentObject(auth)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Close") { editingPersona = nil }
                         }
                     }
             }
@@ -66,28 +82,22 @@ struct SettingsView: View {
 
     private var voiceSection: some View {
         VStack(alignment: .leading, spacing: AppTheme.spacingSM) {
-            sectionHeader("Voice", footer: voiceSectionFooter)
+            sectionHeader("Voices", footer: voiceSectionFooter)
 
-            ForEach(presets) { persona in
+            ForEach(personas) { persona in
                 VoiceCardRow(
                     persona: persona,
                     isSelected: persona.id == selectedVoiceId,
-                    onSelect: { selectVoice(persona) }
+                    onSelect: { selectVoice(persona) },
+                    onEdit: { editingPersona = persona }
                 )
-            }
-
-            ForEach(customPersonas) { persona in
-                VoiceCardRow(
-                    persona: persona,
-                    isSelected: persona.id == selectedVoiceId,
-                    onSelect: { selectVoice(persona) }
-                )
+                .animation(.easeInOut(duration: 0.2), value: selectedVoiceId)
             }
 
             Button {
                 showBuilder = true
             } label: {
-                Label("Create custom voice", systemImage: "plus.circle")
+                Label("Create new voice", systemImage: "plus.circle")
                     .font(.body)
                     .foregroundStyle(AppTheme.accent)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -101,9 +111,12 @@ struct SettingsView: View {
 
     private var intensitySection: some View {
         VStack(alignment: .leading, spacing: AppTheme.spacingSM) {
-            sectionHeader("Voice intensity", footer: "Dial how strongly each layer comes through.")
+            sectionHeader(
+                "Voice intensity",
+                footer: "Quick tweak for the selected voice. Same sliders are in the full editor (pencil)."
+            )
 
-            if PresetLoader.persona(byId: selectedVoiceId, custom: customPersonas) != nil {
+            if PersonaStore.persona(byId: selectedVoiceId, in: personas) != nil {
                 PersonaIntensityView(intensities: Binding(
                     get: { intensitiesForSelectedVoice() },
                     set: { applyIntensities($0) }
@@ -112,6 +125,24 @@ struct SettingsView: View {
                 .background(AppTheme.surfaceElevated)
                 .clipShape(RoundedRectangle(cornerRadius: AppTheme.radiusCard, style: .continuous))
             }
+        }
+    }
+
+    private var chatQualitySection: some View {
+        VStack(alignment: .leading, spacing: AppTheme.spacingSM) {
+            sectionHeader(
+                "Reply quality",
+                footer: "High fidelity drafts an accurate answer first, then applies your voice. Slower and counts as 2 messages toward your limit."
+            )
+
+            Toggle("High fidelity replies", isOn: Binding(
+                get: { VoicePreferences.highFidelityReplies },
+                set: { VoicePreferences.highFidelityReplies = $0 }
+            ))
+            .tint(AppTheme.accent)
+            .padding(AppTheme.spacingMD)
+            .background(AppTheme.surfaceElevated)
+            .clipShape(RoundedRectangle(cornerRadius: AppTheme.radiusCard, style: .continuous))
         }
     }
 
@@ -174,10 +205,11 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: AppTheme.spacingSM) {
             sectionHeader("Manage")
             NavigationLink {
-                CustomPersonaListView()
+                VoiceListView()
+                    .environmentObject(auth)
             } label: {
                 HStack {
-                    Text("Edit custom voices")
+                    Text("Manage all voices")
                         .foregroundStyle(AppTheme.textPrimary)
                     Spacer()
                     Image(systemName: "chevron.right")
@@ -217,9 +249,16 @@ struct SettingsView: View {
         }
     }
 
+    private func syncSelectedVoiceId() {
+        selectedVoiceId = activeConversation?.personaId ?? VoicePreferences.defaultVoiceId
+    }
+
     private func selectVoice(_ persona: Persona) {
+        selectedVoiceId = persona.id
+
         if let activeConversation {
             activeConversation.personaId = persona.id
+            activeConversation.layerIntensities = persona.intensities
             try? modelContext.save()
         } else {
             VoicePreferences.defaultVoiceId = persona.id
@@ -230,7 +269,10 @@ struct SettingsView: View {
         if let activeConversation {
             return activeConversation.layerIntensities
         }
-        return conversations.first(where: { $0.personaId == selectedVoiceId })?.layerIntensities ?? .full
+        if let persona = PersonaStore.persona(byId: selectedVoiceId, in: personas) {
+            return persona.intensities
+        }
+        return .full
     }
 
     private func applyIntensities(_ intensities: LayerIntensities) {
@@ -240,6 +282,11 @@ struct SettingsView: View {
             for conversation in conversations where conversation.personaId == selectedVoiceId {
                 conversation.layerIntensities = intensities
             }
+        }
+
+        if var persona = PersonaStore.persona(byId: selectedVoiceId, in: personas) {
+            persona.intensities = intensities
+            PersonaStore.save(persona, isBuiltIn: persona.isPreset, context: modelContext)
         }
         try? modelContext.save()
     }

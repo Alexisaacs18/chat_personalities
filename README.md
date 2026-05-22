@@ -58,7 +58,7 @@ The API is a **serverless handler** (not `server.listen` on Vercel). Local dev s
 2. Set **Root Directory** to `ToneChatBackend`.
 3. **Framework Preset:** Other (not Next.js). **Build Command:** `npm run build` (must **not** be `npm run dev` — that watch process never exits and hangs the deploy).
 4. **Output Directory:** leave empty.
-5. **Environment variables** (Production): `ANTHROPIC_API_KEY`, `JWT_SECRET`, `APPLE_CLIENT_ID`, `ALLOW_DEV_AUTH=false`, and optional rate-limit vars from `.env.example`.
+5. **Environment variables** (Production): `ANTHROPIC_API_KEY`, `JWT_SECRET`, `APPLE_CLIENT_ID`, `ALLOW_DEV_AUTH=false`, `MAX_TOKENS=2048`, `CHAT_TEMPERATURE=0.7`, `HIGH_FIDELITY_ENABLED=true`, and optional rate-limit vars from `.env.example`.
 6. Deploy. Your API base URL is `https://<your-project>.vercel.app` (routes like `/v1/health`, `/v1/chat`).
 7. Set `TONECHAT_API_BASE` in the iOS app to that HTTPS URL.
 
@@ -80,4 +80,4 @@ Bundled JSON in `ToneChat/Presets/`:
 - Recovery Mentor (NE DC)
 - Angry Old Australian
 
-Customize per-chat with intensity sliders or build custom voices in-app.
+All voices (including bundled presets) are fully editable in Settings or **Manage all voices**. Edit name, layer intensities, core identity, speech patterns, vocabulary, constraints, and example exchanges. Built-in voices can be reset to bundled defaults.

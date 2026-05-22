@@ -28,7 +28,8 @@
 		A10000010000000000000016 /* NEDCRecovered.json in Resources */ = {isa = PBXBuildFile; fileRef = A10000110000000000000016 /* NEDCRecovered.json */; };
 		A10000010000000000000017 /* AngryAustralian.json in Resources */ = {isa = PBXBuildFile; fileRef = A10000110000000000000017 /* AngryAustralian.json */; };
 		A10000010000000000000018 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A10000110000000000000018 /* PrivacyInfo.xcprivacy */; };
-		A10000010000000000000019 /* CustomPersonaListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000011000000000000001B /* CustomPersonaListView.swift */; };
+		A10000010000000000000019 /* VoiceListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000011000000000000001B /* VoiceListView.swift */; };
+		A10000010000000000000027 /* PersonaStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000110000000000000027 /* PersonaStore.swift */; };
 		A1000001000000000000001C /* MainSplitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000011000000000000001C /* MainSplitView.swift */; };
 		A1000001000000000000001D /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000011000000000000001D /* SidebarView.swift */; };
 		A1000001000000000000001E /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000011000000000000001E /* SettingsView.swift */; };
@@ -38,6 +39,8 @@
 		A10000010000000000000022 /* ChatComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000110000000000000022 /* ChatComposerView.swift */; };
 		A10000010000000000000023 /* SidebarConversationRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000110000000000000023 /* SidebarConversationRow.swift */; };
 		A10000010000000000000024 /* VoiceCardRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000110000000000000024 /* VoiceCardRow.swift */; };
+		A10000010000000000000025 /* PersonaTemplates.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000110000000000000025 /* PersonaTemplates.swift */; };
+		A10000010000000000000026 /* VoiceTestService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000110000000000000026 /* VoiceTestService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -65,7 +68,8 @@
 		A10000110000000000000018 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		A10000110000000000000019 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A1000011000000000000001A /* ToneChat.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ToneChat.entitlements; sourceTree = "<group>"; };
-		A1000011000000000000001B /* CustomPersonaListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPersonaListView.swift; sourceTree = "<group>"; };
+		A1000011000000000000001B /* VoiceListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceListView.swift; sourceTree = "<group>"; };
+		A10000110000000000000027 /* PersonaStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonaStore.swift; sourceTree = "<group>"; };
 		A1000011000000000000001C /* MainSplitView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainSplitView.swift; sourceTree = "<group>"; };
 		A1000011000000000000001D /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		A1000011000000000000001E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -75,6 +79,8 @@
 		A10000110000000000000022 /* ChatComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatComposerView.swift; sourceTree = "<group>"; };
 		A10000110000000000000023 /* SidebarConversationRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarConversationRow.swift; sourceTree = "<group>"; };
 		A10000110000000000000024 /* VoiceCardRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCardRow.swift; sourceTree = "<group>"; };
+		A10000110000000000000025 /* PersonaTemplates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonaTemplates.swift; sourceTree = "<group>"; };
+		A10000110000000000000026 /* VoiceTestService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceTestService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -142,6 +148,9 @@
 				A10000110000000000000009 /* AuthService.swift */,
 				A1000011000000000000000A /* ChatAPIClient.swift */,
 				A1000011000000000000001F /* VoicePreferences.swift */,
+				A10000110000000000000025 /* PersonaTemplates.swift */,
+				A10000110000000000000026 /* VoiceTestService.swift */,
+				A10000110000000000000027 /* PersonaStore.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -163,7 +172,7 @@
 				A1000011000000000000000F /* PersonaBuilderView.swift */,
 				A10000110000000000000010 /* ChatView.swift */,
 				A10000110000000000000013 /* RootView.swift */,
-				A1000011000000000000001B /* CustomPersonaListView.swift */,
+				A1000011000000000000001B /* VoiceListView.swift */,
 				A1000011000000000000001C /* MainSplitView.swift */,
 				A1000011000000000000001D /* SidebarView.swift */,
 				A1000011000000000000001E /* SettingsView.swift */,
@@ -289,12 +298,15 @@
 				A10000010000000000000022 /* ChatComposerView.swift in Sources */,
 				A10000010000000000000023 /* SidebarConversationRow.swift in Sources */,
 				A10000010000000000000024 /* VoiceCardRow.swift in Sources */,
+				A10000010000000000000025 /* PersonaTemplates.swift in Sources */,
+				A10000010000000000000026 /* VoiceTestService.swift in Sources */,
 				A1000001000000000000000D /* PersonaIntensityView.swift in Sources */,
 				A1000001000000000000000E /* PersonaPickerSheet.swift in Sources */,
 				A1000001000000000000000F /* PersonaBuilderView.swift in Sources */,
 				A10000010000000000000010 /* ChatView.swift in Sources */,
 				A10000010000000000000013 /* RootView.swift in Sources */,
-				A10000010000000000000019 /* CustomPersonaListView.swift in Sources */,
+				A10000010000000000000019 /* VoiceListView.swift in Sources */,
+				A10000010000000000000027 /* PersonaStore.swift in Sources */,
 				A1000001000000000000001C /* MainSplitView.swift in Sources */,
 				A1000001000000000000001D /* SidebarView.swift in Sources */,
 				A1000001000000000000001E /* SettingsView.swift in Sources */,

@@ -1,8 +1,7 @@
 import SwiftUI
 
 struct SidebarView: View {
-    let presets: [Persona]
-    let customPersonas: [Persona]
+    let personas: [Persona]
     let conversations: [Conversation]
     @Binding var selectedConversationId: UUID?
     var onNewChat: () -> Void
@@ -56,7 +55,7 @@ struct SidebarView: View {
                 .overlay(AppTheme.border)
 
             NavigationLink {
-                SettingsView(presets: presets, customPersonas: customPersonas)
+                SettingsView()
             } label: {
                 Label("Settings", systemImage: "gearshape")
                     .font(.body)
@@ -70,6 +69,6 @@ struct SidebarView: View {
     }
 
     private func voiceName(for id: String) -> String {
-        PresetLoader.persona(byId: id, custom: customPersonas)?.name ?? "Voice"
+        PersonaStore.persona(byId: id, in: personas)?.name ?? "Voice"
     }
 }

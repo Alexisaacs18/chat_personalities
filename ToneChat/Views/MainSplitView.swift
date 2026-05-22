@@ -2,17 +2,15 @@ import SwiftData
 import SwiftUI
 
 struct MainSplitView: View {
-    let presets: [Persona]
-
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Conversation.updatedAt, order: .reverse) private var conversations: [Conversation]
-    @Query(sort: \CustomPersona.createdAt, order: .reverse) private var customStored: [CustomPersona]
+    @Query(sort: \CustomPersona.createdAt, order: .forward) private var customStored: [CustomPersona]
 
     @State private var selectedConversationId: UUID?
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
 
-    private var customPersonas: [Persona] {
-        customStored.map { $0.toPersona() }
+    private var personas: [Persona] {
+        PersonaStore.allPersonas(from: customStored)
     }
 
     private var selectedConversation: Conversation? {
@@ -23,8 +21,7 @@ struct MainSplitView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(
-                presets: presets,
-                customPersonas: customPersonas,
+                personas: personas,
                 conversations: conversations,
                 selectedConversationId: $selectedConversationId,
                 onNewChat: { createConversation(select: true) },
@@ -32,11 +29,7 @@ struct MainSplitView: View {
             )
         } detail: {
             if let conversation = selectedConversation {
-                ChatView(
-                    conversation: conversation,
-                    presets: presets,
-                    customPersonas: customPersonas
-                )
+                ChatView(conversation: conversation, personas: personas)
             } else {
                 ContentUnavailableView {
                     Label("Select a chat", systemImage: "bubble.left.and.bubble.right")
@@ -57,9 +50,10 @@ struct MainSplitView: View {
     }
 
     private func bootstrapIfNeeded() {
+        PersonaStore.seedBuiltInsIfNeeded(context: modelContext)
         migrateLegacyVoiceIds()
         if VoicePreferences.defaultVoiceId.isEmpty {
-            VoicePreferences.defaultVoiceId = presets.first?.id ?? PresetLoader.defaultPersona.id
+            VoicePreferences.defaultVoiceId = personas.first?.id ?? PresetLoader.defaultPersona.id
         }
         if conversations.isEmpty {
             createConversation(select: true)
@@ -93,8 +87,11 @@ struct MainSplitView: View {
 
     private func createConversation(select: Bool) {
         let voiceId = VoicePreferences.defaultVoiceId
-        let persona = PresetLoader.persona(byId: voiceId, custom: customPersonas) ?? presets.first!
+        let persona = PersonaStore.persona(byId: voiceId, in: personas) ?? personas.first ?? PresetLoader.defaultPersona
         let conversation = Conversation(personaId: persona.id)
+        if let stored = PersonaStore.persona(byId: persona.id, in: personas) {
+            conversation.layerIntensities = stored.intensities
+        }
         modelContext.insert(conversation)
         try? modelContext.save()
         if select {

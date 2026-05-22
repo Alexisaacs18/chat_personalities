@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node --test src/personaEngine.test.js",
+    "build": "node --test src/personaEngine.test.js src/turnClassifier.test.js",
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "test": "node --test src/personaEngine.test.js"
+    "test": "node --test src/personaEngine.test.js src/turnClassifier.test.js"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

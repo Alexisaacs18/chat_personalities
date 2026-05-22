@@ -3,15 +3,21 @@ import SwiftUI
 
 /// Global default voice for new chats; synced from Settings.
 enum VoicePreferences {
-    private static let defaultVoiceKey = "defaultVoiceId"
+    static let defaultVoiceIdKey = "defaultVoiceId"
+    private static let highFidelityKey = "highFidelityReplies"
 
     static var defaultVoiceId: String {
         get {
-            UserDefaults.standard.string(forKey: defaultVoiceKey)
+            UserDefaults.standard.string(forKey: defaultVoiceIdKey)
                 ?? PresetLoader.defaultPersona.id
         }
         set {
-            UserDefaults.standard.set(newValue, forKey: defaultVoiceKey)
+            UserDefaults.standard.set(newValue, forKey: defaultVoiceIdKey)
         }
+    }
+
+    static var highFidelityReplies: Bool {
+        get { UserDefaults.standard.bool(forKey: highFidelityKey) }
+        set { UserDefaults.standard.set(newValue, forKey: highFidelityKey) }
     }
 }

@@ -1,6 +1,6 @@
 const buckets = new Map();
 
-export function checkRateLimit(key, limitPerMinute) {
+export function checkRateLimit(key, limitPerMinute, cost = 1) {
   const now = Date.now();
   const windowMs = 60_000;
   let bucket = buckets.get(key);
@@ -10,7 +10,7 @@ export function checkRateLimit(key, limitPerMinute) {
     buckets.set(key, bucket);
   }
 
-  bucket.count += 1;
+  bucket.count += cost;
   if (bucket.count > limitPerMinute) {
     return false;
   }

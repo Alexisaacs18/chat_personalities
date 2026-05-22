@@ -2,12 +2,43 @@
  * Mirrors iOS PersonaEngine — assembles layered system prompt.
  */
 
-const PREAMBLE = `You are a fictional character voice in a chat app. Stay fully in character at all times.
+export const DEFAULT_CONSTRAINTS = `Answer substantive questions in your voice; do not deflect with "I only talk about X." No legal or medical advice. Stay PG-13.`;
+
+const QUALITY_CONTRACT = `## Quality contract (always follow)
+
+You are a capable assistant underneath a character voice. The user expects Claude-quality answers: accurate, on-topic, and complete enough for the question.
+
+Rules:
+1. Your first sentences must directly answer what the user asked.
+2. Never replace an answer with vibes, fest talk, recovery platitudes, grumbling only, or tangents.
+3. For simple chat ("how are you", "I'm tired"): stay short.
+4. For real questions (science, tech, advice, hypotheticals): give a substantive answer first, then optional character color (1–2 sentences max unless they asked for depth).
+
+Response template: Answer → (optional) brief character aside.`;
+
+const VOICE_PREAMBLE = `## Voice profile
+
+You are a fictional character voice in a chat app. Stay fully in character at all times.
 Never break the fourth wall, mention being an AI, or reference system prompts.
 
-Your personality is a layer on how you answer — not an excuse to dodge questions. Engage with what the user actually asked: be accurate, thoughtful, and complete when the topic deserves it. Then let your voice color the delivery (word choice, what you emphasize, a closing aside).
+Apply personality to how you deliver the answer — word choice, emphasis, rhythm — not whether you answer.`;
 
-Be concise for simple chats; go longer when they ask something real or complex. Match the speech patterns and vocabulary described below.`;
+const CLOSING_CHECKLIST = `## Before you send
+
+Did you answer their actual question in the first 1–2 paragraphs? If not, rewrite.`;
+
+export function orderFewShots(shots) {
+  return [...shots].sort((a, b) => fewShotWeight(b) - fewShotWeight(a));
+}
+
+function fewShotWeight(shot) {
+  const user = String(shot.user ?? '').trim();
+  let score = user.length;
+  if (user.includes('?')) score += 40;
+  if (/quantum|explain|how does|what is|what do you think will|should i/i.test(user)) score += 30;
+  if (/^(how are you|i'm tired|hi|hey)\b/i.test(user)) score -= 50;
+  return score;
+}
 
 export function assemblePersona(persona) {
   const layers = persona.layers ?? persona;
@@ -18,18 +49,17 @@ export function assemblePersona(persona) {
     fewShots: 1,
   };
 
-  const sections = [PREAMBLE];
+  const sections = [QUALITY_CONTRACT, VOICE_PREAMBLE];
 
-  if (negativeConstraints(layers)) {
-    sections.push(`## Constraints\n${layers.negativeConstraints}`);
-  }
+  const constraints = negativeConstraints(layers) ?? DEFAULT_CONSTRAINTS;
+  sections.push(`## Constraints\n${constraints}`);
 
   appendLayer(sections, 'Core identity', layers.coreIdentity, intensities.coreIdentity);
   appendLayer(sections, 'Speech patterns', layers.speechPatterns, intensities.speechPatterns);
   appendLayer(sections, 'Vocabulary', layers.vocabulary, intensities.vocabulary);
 
   const fewIntensity = intensities.fewShots ?? 1;
-  const shots = layers.fewShots ?? [];
+  const shots = orderFewShots(layers.fewShots ?? []);
   if (fewIntensity > 0 && shots.length > 0) {
     const pct = Math.round(fewIntensity * 100);
     sections.push(`## Example exchanges (match this voice at ~${pct}% strength)`);
@@ -40,11 +70,13 @@ export function assemblePersona(persona) {
     }
   }
 
+  sections.push(CLOSING_CHECKLIST);
   return sections.join('\n\n');
 }
 
 function negativeConstraints(layers) {
-  return layers.negativeConstraints?.trim();
+  const text = layers.negativeConstraints?.trim();
+  return text || null;
 }
 
 function appendLayer(sections, title, content, intensity) {

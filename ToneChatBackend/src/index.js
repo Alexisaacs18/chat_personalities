@@ -7,6 +7,7 @@ import { createServer } from 'node:http';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 config({ path: resolve(__dirname, '../.env') });
 import { assemblePersona } from './personaEngine.js';
+import { completeAnthropic, streamAnthropicToSSE } from './anthropic.js';
 import {
   appleSubject,
   deleteUser,
@@ -18,16 +19,29 @@ import {
   verifyAppleIdentityToken,
 } from './auth.js';
 import { checkRateLimit } from './rateLimit.js';
+import {
+  buildStylizeSystem,
+  buildStylizeUserMessage,
+  DRAFT_SYSTEM,
+} from './stylize.js';
+import {
+  classifyTurn,
+  maxTokensForMode,
+  turnHintForMode,
+} from './turnClassifier.js';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-in-production';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? '';
 const APPLE_CLIENT_ID = process.env.APPLE_CLIENT_ID ?? 'com.personalitychat.app';
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-20250514';
-const MAX_TOKENS = Number(process.env.MAX_TOKENS ?? 1024);
+const MAX_TOKENS = Number(process.env.MAX_TOKENS ?? 2048);
+const CHAT_TEMPERATURE = Number(process.env.CHAT_TEMPERATURE ?? 0.7);
+const HIGH_FIDELITY_ENABLED = process.env.HIGH_FIDELITY_ENABLED !== 'false';
 const RATE_LIMIT_APPLE = Number(process.env.RATE_LIMIT_PER_MINUTE ?? 30);
 const RATE_LIMIT_GUEST = Number(process.env.GUEST_RATE_LIMIT_PER_MINUTE ?? 10);
 const TOKEN_TTL_SECONDS = 30 * 24 * 3600;
+const IS_DEV = process.env.VERCEL !== '1' && process.env.NODE_ENV !== 'production';
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -91,7 +105,22 @@ async function handleDeleteAccount(req, res, sub) {
   json(res, 200, { deleted: true });
 }
 
-async function streamAnthropic(res, system, messages) {
+function lastUserMessage(messages) {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i].role === 'user' && messages[i].content?.trim()) {
+      return messages[i].content.trim();
+    }
+  }
+  return '';
+}
+
+function buildSystemWithTurnHint(persona, lastUser) {
+  const mode = classifyTurn(lastUser);
+  const system = `${assemblePersona(persona)}\n\n${turnHintForMode(mode)}`;
+  return { system, mode };
+}
+
+async function streamAnthropic(res, system, messages, options = {}) {
   const finish = (payload) => {
     if (payload) sendSSE(res, payload);
     sendSSE(res, { type: 'done' });
@@ -103,90 +132,82 @@ async function streamAnthropic(res, system, messages) {
     return;
   }
 
-  const apiMessages = messages
-    .filter((m) => m.content?.trim())
-    .map((m) => ({
-      role: m.role === 'assistant' ? 'assistant' : 'user',
-      content: m.content,
-    }));
+  await streamAnthropicToSSE({
+    apiKey: ANTHROPIC_API_KEY,
+    model: ANTHROPIC_MODEL,
+    system,
+    messages,
+    maxTokens: options.maxTokens ?? MAX_TOKENS,
+    temperature: options.temperature ?? CHAT_TEMPERATURE,
+    sendSSE: (obj) => sendSSE(res, obj),
+    finish,
+  });
+}
 
-  if (apiMessages.length === 0) {
-    finish({ type: 'error', message: 'No messages to send' });
+async function handleHighFidelityChat(res, persona, recent, lastUser, options) {
+  const finish = (payload) => {
+    if (payload) sendSSE(res, payload);
+    sendSSE(res, { type: 'done' });
+    res.end();
+  };
+
+  if (!ANTHROPIC_API_KEY) {
+    finish({ type: 'error', message: 'ANTHROPIC_API_KEY not configured on server' });
     return;
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 90_000);
+  const maxTokens = options.maxTokens ?? MAX_TOKENS;
+  const temperature = options.temperature ?? CHAT_TEMPERATURE;
 
-  let upstream;
+  let draft;
   try {
-    upstream = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: ANTHROPIC_MODEL,
-        max_tokens: MAX_TOKENS,
-        stream: true,
-        system,
-        messages: apiMessages,
-      }),
+    draft = await completeAnthropic({
+      apiKey: ANTHROPIC_API_KEY,
+      model: ANTHROPIC_MODEL,
+      system: DRAFT_SYSTEM,
+      messages: recent,
+      maxTokens,
+      temperature: 0.5,
     });
   } catch (e) {
-    clearTimeout(timeout);
-    const msg = e.name === 'AbortError' ? 'Anthropic request timed out' : e.message;
-    finish({ type: 'error', message: msg });
-    return;
-  }
-  clearTimeout(timeout);
-
-  if (!upstream.ok) {
-    const errText = await upstream.text();
-    finish({ type: 'error', message: errText });
+    finish({ type: 'error', message: e.message ?? 'Draft failed' });
     return;
   }
 
-  const reader = upstream.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
-
-      for (const line of lines) {
-        if (!line.startsWith('data:')) continue;
-        const data = line.slice(5).trim();
-        if (!data || data === '[DONE]') continue;
-        try {
-          const event = JSON.parse(data);
-          if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
-            sendSSE(res, { type: 'delta', text: event.delta.text ?? '' });
-          }
-        } catch {
-          /* ignore partial JSON */
-        }
-      }
-    }
-  } catch (e) {
-    finish({ type: 'error', message: e.message ?? 'Stream failed' });
+  if (!draft) {
+    finish({ type: 'error', message: 'Draft returned empty' });
     return;
   }
 
-  finish();
+  const stylizeSystem = buildStylizeSystem(persona);
+  const stylizeMessages = [
+    { role: 'user', content: buildStylizeUserMessage(lastUser, draft) },
+  ];
+
+  await streamAnthropicToSSE({
+    apiKey: ANTHROPIC_API_KEY,
+    model: ANTHROPIC_MODEL,
+    system: stylizeSystem,
+    messages: stylizeMessages,
+    maxTokens,
+    temperature,
+    sendSSE: (obj) => sendSSE(res, obj),
+    finish,
+  });
 }
 
 async function handleChat(req, res, identity) {
+  const body = await readBody(req);
+  const { persona, messages, highFidelity } = body;
+
+  if (!persona || !Array.isArray(messages) || messages.length === 0) {
+    return json(res, 400, { error: 'persona and messages required' });
+  }
+
+  const useHighFidelity = Boolean(highFidelity) && HIGH_FIDELITY_ENABLED;
   const limit = identity.tier === 'apple' ? RATE_LIMIT_APPLE : RATE_LIMIT_GUEST;
-  if (!checkRateLimit(identity.sub, limit)) {
+  const rateCost = useHighFidelity ? 2 : 1;
+  if (!checkRateLimit(identity.sub, limit, rateCost)) {
     return json(res, 429, {
       error: 'Rate limit exceeded',
       tier: identity.tier,
@@ -194,24 +215,28 @@ async function handleChat(req, res, identity) {
     });
   }
 
-  const body = await readBody(req);
-  const { persona, messages } = body;
-
-  if (!persona || !Array.isArray(messages) || messages.length === 0) {
-    return json(res, 400, { error: 'persona and messages required' });
-  }
-
   const recent = messages.slice(-20);
-  let system;
-  try {
-    system = assemblePersona(persona);
-  } catch (e) {
-    return json(res, 400, { error: `Invalid persona: ${e.message}` });
+  const lastUser = lastUserMessage(recent);
+  const mode = classifyTurn(lastUser);
+  const maxTokens = maxTokensForMode(mode, MAX_TOKENS);
+  const streamOptions = { maxTokens, temperature: CHAT_TEMPERATURE };
+
+  if (IS_DEV) {
+    console.log('[ToneChat] chat', {
+      mode,
+      highFidelity: useHighFidelity,
+      systemChars: assemblePersona(persona).length,
+    });
   }
 
   sseHeaders(res);
   try {
-    await streamAnthropic(res, system, recent);
+    if (useHighFidelity) {
+      await handleHighFidelityChat(res, persona, recent, lastUser, streamOptions);
+    } else {
+      const { system } = buildSystemWithTurnHint(persona, lastUser);
+      await streamAnthropic(res, system, recent, streamOptions);
+    }
   } catch (e) {
     sendSSE(res, { type: 'error', message: e.message ?? 'Chat failed' });
     sendSSE(res, { type: 'done' });
