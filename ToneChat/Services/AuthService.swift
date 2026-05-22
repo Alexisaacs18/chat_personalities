@@ -103,7 +103,12 @@ final class AuthService: NSObject, ObservableObject {
             request.httpBody = try JSONEncoder().encode(["identityToken": identityToken])
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-                authError = "Sign in failed."
+                if let err = try? JSONDecoder().decode(ServerErrorBody.self, from: data),
+                   let message = err.error, !message.isEmpty {
+                    authError = message
+                } else {
+                    authError = "Sign in failed (HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0))."
+                }
                 return
             }
             let decoded = try JSONDecoder().decode(AuthResponse.self, from: data)
@@ -136,6 +141,10 @@ final class AuthService: NSObject, ObservableObject {
     private struct AuthResponse: Decodable {
         let token: String
         let tier: String?
+    }
+
+    private struct ServerErrorBody: Decodable {
+        let error: String?
     }
 }
 

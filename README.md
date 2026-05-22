@@ -43,7 +43,7 @@ curl -s -X POST http://127.0.0.1:8787/v1/auth/guest \
 ### iOS
 
 1. Open `ToneChat.xcodeproj` in Xcode.
-2. Set your **Team** and update bundle ID if needed (`com.tonechat.app`).
+2. Set your **Team** and update bundle ID if needed (`com.personalitychat.app`).
 3. Enable **Sign in with Apple** for the App ID in Developer Portal (optional sign-in still requires capability).
 4. Scheme environment (Simulator): `TONECHAT_API_BASE` = `http://127.0.0.1:8787` (default in Info.plist).
 5. Build & run — no sign-in required to chat.
@@ -67,7 +67,7 @@ The API is a **serverless handler** (not `server.listen` on Vercel). Local dev s
 ## TestFlight
 
 1. Apple Developer Program membership.
-2. Register bundle ID `com.tonechat.app` with Sign in with Apple.
+2. Register bundle ID `com.personalitychat.app` with Sign in with Apple.
 3. Deploy backend with HTTPS; set `ALLOW_DEV_AUTH=false` in production.
 4. Update `TONECHAT_API_BASE` in Info.plist to production URL.
 5. Archive → Distribute App → TestFlight.

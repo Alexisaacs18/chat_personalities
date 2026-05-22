@@ -22,7 +22,7 @@ import { checkRateLimit } from './rateLimit.js';
 const PORT = Number(process.env.PORT ?? 8787);
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-in-production';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? '';
-const APPLE_CLIENT_ID = process.env.APPLE_CLIENT_ID ?? 'com.tonechat.app';
+const APPLE_CLIENT_ID = process.env.APPLE_CLIENT_ID ?? 'com.personalitychat.app';
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-20250514';
 const MAX_TOKENS = Number(process.env.MAX_TOKENS ?? 1024);
 const RATE_LIMIT_APPLE = Number(process.env.RATE_LIMIT_PER_MINUTE ?? 30);
