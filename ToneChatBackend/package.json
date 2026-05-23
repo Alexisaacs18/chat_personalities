@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node --test src/personaEngine.test.js src/turnClassifier.test.js src/rateLimit.test.js src/tokenBudget.test.js",
+    "build": "node --test src/personaEngine.test.js src/turnClassifier.test.js src/rateLimit.test.js src/tokenBudget.test.js src/auth.test.js",
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "test": "node --test src/personaEngine.test.js src/turnClassifier.test.js src/rateLimit.test.js src/tokenBudget.test.js"
+    "test": "node --test src/personaEngine.test.js src/turnClassifier.test.js src/rateLimit.test.js src/tokenBudget.test.js src/auth.test.js"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

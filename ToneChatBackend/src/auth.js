@@ -1,10 +1,31 @@
 import { createHash } from 'node:crypto';
 import * as jose from 'jose';
 
+const { createRemoteJWKSet, jwtVerify } = jose;
+
 const users = new Map();
+const APPLE_JWKS = createRemoteJWKSet(new URL('https://appleid.apple.com/auth/keys'));
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Bundle IDs accepted in Apple identity token `aud` (comma-separated in env). */
+export function parseAppleClientIds() {
+  const raw =
+    process.env.APPLE_CLIENT_IDS ??
+    process.env.APPLE_CLIENT_ID ??
+    'com.personalitychat.app,com.tonechat.app';
+  const ids = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return ids.length > 0 ? ids : ['com.personalitychat.app'];
+}
+
+export function audienceMatches(payloadAud, allowedIds) {
+  const audList = Array.isArray(payloadAud) ? payloadAud : payloadAud ? [payloadAud] : [];
+  return audList.some((a) => allowedIds.includes(a));
+}
 
 export function getUser(sub) {
   return users.get(sub);
@@ -48,7 +69,7 @@ export async function issueToken(sub, tier, secret) {
 
 export async function verifyToken(token, secret) {
   const key = new TextEncoder().encode(secret);
-  const { payload } = await jose.jwtVerify(token, key);
+  const { payload } = await jwtVerify(token, key);
   return payload;
 }
 
@@ -77,27 +98,43 @@ export async function resolveIdentity(req, secret) {
 }
 
 /**
- * MVP Apple Sign In: decode identity token and verify issuer/audience/exp.
- * For production, also verify JWT signature against Apple JWKS.
+ * Verify Apple Sign In identity token (signature + issuer/exp) and audience (bundle ID).
  */
-export async function verifyAppleIdentityToken(identityToken, clientId) {
-  const parts = identityToken.split('.');
-  if (parts.length !== 3) throw new Error('Invalid identity token');
+export async function verifyAppleIdentityToken(identityToken, clientIds = parseAppleClientIds()) {
+  const allowed = Array.isArray(clientIds) ? clientIds : parseAppleClientIds();
 
-  const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+  let payload;
+  try {
+    const verified = await jwtVerify(identityToken, APPLE_JWKS, {
+      issuer: 'https://appleid.apple.com',
+    });
+    payload = verified.payload;
+  } catch {
+    throw Object.assign(new Error('Apple sign-in token could not be verified. Try again.'), {
+      status: 401,
+    });
+  }
 
-  if (payload.iss !== 'https://appleid.apple.com') {
-    throw new Error('Invalid token issuer');
-  }
-  if (payload.aud !== clientId) {
-    throw new Error('Invalid token audience');
-  }
-  if (payload.exp * 1000 < Date.now()) {
-    throw new Error('Token expired');
+  if (!audienceMatches(payload.aud, allowed)) {
+    const isDev = process.env.VERCEL !== '1' && process.env.NODE_ENV !== 'production';
+    if (isDev) {
+      console.warn('[ToneChat] Apple token audience mismatch', {
+        aud: payload.aud,
+        allowed,
+      });
+    }
+    throw Object.assign(
+      new Error(
+        'Apple Sign In failed: server bundle ID does not match the app. Set APPLE_CLIENT_ID to com.personalitychat.app on Vercel.'
+      ),
+      { status: 401 }
+    );
   }
 
   const sub = payload.sub;
-  if (!sub) throw new Error('Missing subject');
+  if (!sub) {
+    throw Object.assign(new Error('Invalid Apple sign-in token'), { status: 401 });
+  }
 
   return { sub, email: payload.email };
 }

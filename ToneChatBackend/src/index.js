@@ -16,6 +16,7 @@ import {
   issueToken,
   resolveIdentity,
   upsertUser,
+  parseAppleClientIds,
   verifyAppleIdentityToken,
 } from './auth.js';
 import { checkChatRateLimits } from './rateLimit.js';
@@ -39,7 +40,7 @@ import {
 const PORT = Number(process.env.PORT ?? 8787);
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-in-production';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? '';
-const APPLE_CLIENT_ID = process.env.APPLE_CLIENT_ID ?? 'com.personalitychat.app';
+const APPLE_CLIENT_IDS = parseAppleClientIds();
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-20250514';
 const MAX_TOKENS = Number(process.env.MAX_TOKENS ?? 2048);
 const CHAT_TEMPERATURE = Number(process.env.CHAT_TEMPERATURE ?? 0.7);
@@ -101,7 +102,7 @@ async function handleAppleAuth(req, res) {
   const { identityToken } = body;
   if (!identityToken) return json(res, 400, { error: 'identityToken required' });
 
-  const { sub: appleSub } = await verifyAppleIdentityToken(identityToken, APPLE_CLIENT_ID);
+  const { sub: appleSub } = await verifyAppleIdentityToken(identityToken, APPLE_CLIENT_IDS);
   const sub = appleSubject(appleSub);
   upsertUser(sub, appleSub);
   const token = await issueToken(sub, 'apple', JWT_SECRET);

@@ -39,7 +39,6 @@ struct SettingsView: View {
                 chatQualitySection
                 accountSection
                 manageSection
-                legalSection
                 if let deleteError {
                     Text(deleteError)
                         .font(.caption)
@@ -277,19 +276,6 @@ struct SettingsView: View {
                 .background(AppTheme.surfaceElevated)
                 .clipShape(RoundedRectangle(cornerRadius: AppTheme.radiusCard, style: .continuous))
             }
-        }
-    }
-
-    private var legalSection: some View {
-        VStack(alignment: .leading, spacing: AppTheme.spacingSM) {
-            sectionHeader("About")
-            Link("Privacy Policy", destination: AppConfig.privacyPolicyURL)
-                .font(.body)
-                .foregroundStyle(AppTheme.accent)
-                .padding(AppTheme.spacingMD)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(AppTheme.surfaceElevated)
-                .clipShape(RoundedRectangle(cornerRadius: AppTheme.radiusCard, style: .continuous))
         }
     }
 

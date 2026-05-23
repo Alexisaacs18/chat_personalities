@@ -103,6 +103,11 @@ final class AuthService: NSObject, ObservableObject {
             request.httpBody = try JSONEncoder().encode(["identityToken": identityToken])
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                if http.statusCode == 401 {
+                    KeychainHelper.deleteToken()
+                    isSessionReady = false
+                    try? await fetchGuestSession()
+                }
                 if let err = try? JSONDecoder().decode(ServerErrorBody.self, from: data),
                    let message = err.error, !message.isEmpty {
                     authError = message
