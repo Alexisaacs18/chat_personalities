@@ -5,7 +5,6 @@ enum PersonaStore {
     /// Seeds bundled presets into SwiftData on first launch so every voice is editable.
     static func seedBuiltInsIfNeeded(context: ModelContext) {
         let existing = (try? context.fetch(FetchDescriptor<CustomPersona>())) ?? []
-        let existingIds = Set(existing.map(\.id))
         let presetIds = Set(PresetLoader.loadAll().map(\.id))
 
         for preset in PresetLoader.loadAll() {

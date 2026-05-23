@@ -102,8 +102,9 @@ final class AuthService: NSObject, ObservableObject {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONEncoder().encode(["identityToken": identityToken])
             let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-                if http.statusCode == 401 {
+            let http = response as? HTTPURLResponse
+            guard let http, (200...299).contains(http.statusCode) else {
+                if http?.statusCode == 401 {
                     KeychainHelper.deleteToken()
                     isSessionReady = false
                     try? await fetchGuestSession()
@@ -112,7 +113,7 @@ final class AuthService: NSObject, ObservableObject {
                    let message = err.error, !message.isEmpty {
                     authError = message
                 } else {
-                    authError = "Sign in failed (HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0))."
+                    authError = "Sign in failed (HTTP \(http?.statusCode ?? 0))."
                 }
                 return
             }
