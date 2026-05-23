@@ -9,6 +9,7 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var auth: AuthService
+    @EnvironmentObject private var usage: UsageService
     @Query(sort: \CustomPersona.createdAt, order: .forward) private var customStored: [CustomPersona]
     @Query(sort: \Conversation.updatedAt, order: .reverse) private var conversations: [Conversation]
 
@@ -34,6 +35,7 @@ struct SettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: AppTheme.spacingLG) {
+                usageSection
                 voiceSection
                 intensitySection
                 chatQualitySection
@@ -55,7 +57,13 @@ struct SettingsView: View {
                 Button("Done") { dismiss() }
             }
         }
-        .onAppear { syncSelectedVoiceId() }
+        .onAppear {
+            syncSelectedVoiceId()
+            Task { await usage.refresh(auth: auth) }
+        }
+        .onChange(of: auth.isSignedInWithApple) { _, _ in
+            Task { await usage.refresh(auth: auth) }
+        }
         .onChange(of: activeConversation?.personaId) { _, _ in syncSelectedVoiceId() }
         .confirmationDialog(
             "Delete \"\(personaPendingDelete?.name ?? "")\"?",
@@ -143,6 +151,23 @@ struct SettingsView: View {
                     .clipShape(RoundedRectangle(cornerRadius: AppTheme.radiusCard, style: .continuous))
             }
             .buttonStyle(.plain)
+        }
+    }
+
+    private var usageSection: some View {
+        VStack(alignment: .leading, spacing: AppTheme.spacingSM) {
+            sectionHeader(
+                "Usage",
+                footer: "Rolling 4-hour window. Long replies use more tokens."
+            )
+
+            UsageBarView(usage: usage.usage, isLoading: usage.isLoading)
+
+            if let loadError = usage.loadError {
+                Text(loadError)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.errorText)
+            }
         }
     }
 

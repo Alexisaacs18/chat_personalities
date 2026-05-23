@@ -4,6 +4,7 @@ import SwiftUI
 @main
 struct ToneChatApp: App {
     @StateObject private var auth = AuthService()
+    @StateObject private var usage = UsageService()
 
     var sharedModelContainer: ModelContainer = ModelPersistence.makeContainer()
 
@@ -11,6 +12,7 @@ struct ToneChatApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(auth)
+                .environmentObject(usage)
         }
         .modelContainer(sharedModelContainer)
     }
