@@ -25,6 +25,7 @@ import {
   estimateChatCostUsd,
   formatUsageResponse,
   recordTokenUsage,
+  recordUsdSpend,
 } from './tokenBudget.js';
 import {
   buildStylizeSystem,
@@ -131,8 +132,12 @@ function buildSystemWithTurnHint(persona, lastUser) {
 
 async function streamAnthropic(res, system, messages, options = {}) {
   const finish = (payload) => {
-    if (payload?.usage && options.sub) {
-      recordTokenUsage(options.sub, payload.usage);
+    if (options.sub) {
+      if (payload?.usage) {
+        recordTokenUsage(options.sub, payload.usage);
+      } else if (payload?.type !== 'error' && options.estimatedUsd) {
+        recordUsdSpend(options.sub, options.estimatedUsd);
+      }
     }
     if (payload?.type === 'error') sendSSE(res, payload);
     sendSSE(res, { type: 'done' });
@@ -157,9 +162,15 @@ async function streamAnthropic(res, system, messages, options = {}) {
 }
 
 async function handleHighFidelityChat(res, persona, recent, lastUser, options) {
+  const stylizeEstimate = options.estimatedUsd ? options.estimatedUsd * 0.55 : undefined;
+
   const finish = (payload) => {
-    if (payload?.usage && options.sub) {
-      recordTokenUsage(options.sub, payload.usage);
+    if (options.sub) {
+      if (payload?.usage) {
+        recordTokenUsage(options.sub, payload.usage);
+      } else if (payload?.type !== 'error' && stylizeEstimate) {
+        recordUsdSpend(options.sub, stylizeEstimate);
+      }
     }
     if (payload?.type === 'error') sendSSE(res, payload);
     sendSSE(res, { type: 'done' });
@@ -195,8 +206,12 @@ async function handleHighFidelityChat(res, persona, recent, lastUser, options) {
     return;
   }
 
-  if (options.sub && draftResult.usage) {
-    recordTokenUsage(options.sub, draftResult.usage);
+  if (options.sub) {
+    if (draftResult.usage) {
+      recordTokenUsage(options.sub, draftResult.usage);
+    } else if (options.estimatedUsd) {
+      recordUsdSpend(options.sub, options.estimatedUsd * 0.45);
+    }
   }
 
   const stylizeSystem = buildStylizeSystem(persona);
@@ -273,12 +288,6 @@ async function handleChat(req, res, identity) {
   const lastUser = lastUserMessage(recent);
   const mode = classifyTurn(lastUser);
   const maxTokens = maxTokensForMode(mode, MAX_TOKENS);
-  const streamOptions = {
-    maxTokens,
-    temperature: CHAT_TEMPERATURE,
-    sub: identity.sub,
-  };
-
   const estimatedUsd = useHighFidelity
     ? estimateHighFidelityCostUsd(persona, recent, lastUser, maxTokens)
     : estimateChatCostUsd({
@@ -306,6 +315,13 @@ async function handleChat(req, res, identity) {
 
     return json(res, 429, payload);
   }
+
+  const streamOptions = {
+    maxTokens,
+    temperature: CHAT_TEMPERATURE,
+    sub: identity.sub,
+    estimatedUsd,
+  };
 
   if (IS_DEV) {
     console.log('[ToneChat] chat', {

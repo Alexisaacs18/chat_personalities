@@ -105,6 +105,15 @@ export function recordTokenUsage(sub, usage) {
   return { spentUsd: usd, inputTokens: input, outputTokens: output };
 }
 
+/** Fallback when Anthropic stream omits usage events — still charge the pre-flight estimate. */
+export function recordUsdSpend(sub, usd) {
+  const amount = Math.max(0, Number(usd) || 0);
+  if (amount === 0) return { spentUsd: 0 };
+  const bucket = getBucket(sub);
+  bucket.spentUsd += amount;
+  return { spentUsd: amount };
+}
+
 export function formatUsageResponse(sub, tier) {
   const status = getTokenBudgetStatus(sub, tier);
   const percentUsed =
